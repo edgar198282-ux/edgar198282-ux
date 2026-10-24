@@ -1,8 +1,9 @@
-# ABAJ Monitor One 0.6.6
-[Download the Android APK](./ABAJ-Monitor-One-v0.6.6.apk)
+# ABAJ Monitor One 0.6.7
 
-**Changes:** compact user-requested interface with fixed People, Map, and Settings tabs; reduced duplicate controls and repetitive explanatory text; contact actions in one menu; dark/light themes; in-app, explicitly approved video calls; optional GPS sharing.
+[Скачать ABAJ Monitor One 0.6.7](./ABAJ-Monitor-One-v0.6.7.apk)
 
-Update manifest: peer-updates.json. For an old APK signed by a different certificate, Android cannot install updates over the old version. Make sure user data is backed up before replacing an older install. Later releases must reuse the same signing key.
+Исправлены контрастность тёмной темы, нижние вкладки и локальная проверка камеры через CameraX. Работающие функции и разрешения сохранены.
 
-Consent required for GPS, camera, and microphone. External services are used for discovery and video calls.
+Автообновление: [peer-updates.json](./peer-updates.json).
+
+Обновление подписано тем же тестовым сертификатом, что и 0.6.6. Для версий с другим сертификатом Android потребует отдельной установки.
