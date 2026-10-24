@@ -1,0 +1,6 @@
+versionName=0.7.6
+versionCode=23
+stagingCommit=c9bcc68a5ecf99008010e94327dfefd585be3900
+parts=9
+bytes=4578567
+sha256=0fc957ce97bc3db4c2427103a7fd1ade6a4b12b70f796dca81fd943d1e79fb64
