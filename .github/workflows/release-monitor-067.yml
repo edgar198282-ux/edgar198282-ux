@@ -1,0 +1,79 @@
+name: Publish signed ABAJ Monitor 0.6.7 update
+on:
+  push:
+    branches: [abaj-monitor-v067-release-staging]
+    paths:
+      - '.github/workflows/release-monitor-067.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: abaj-monitor-one-release
+  cancel-in-progress: false
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct and cryptographically verify candidate APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/abaj-monitor-release
+          test "$(find v067-transfer -maxdepth 1 -type f -name 'apk.part.*' | wc -l)" -eq 9
+          cat v067-transfer/apk.part.0{00..08} | base64 -d > /tmp/abaj-monitor-release/ABAJ-Monitor-One-v0.6.7.apk
+          echo "b1b178f5e9848cc6e20532a007b8d83aeb72dfef3ae05b973e97796c7b5c989e  /tmp/abaj-monitor-release/ABAJ-Monitor-One-v0.6.7.apk" | sha256sum -c -
+          curl -fL --retry 3 --connect-timeout 15 -o /tmp/abaj-monitor-release/ABAJ-Monitor-One-v0.6.6.apk \
+            https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.6.6.apk
+          echo "ade561f03236622b2b54f3ad5631295515bcfcbc7b7d80237b053802f49550fa  /tmp/abaj-monitor-release/ABAJ-Monitor-One-v0.6.6.apk" | sha256sum -c -
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -1)"
+          test -n "$sdkmanager_path"
+          yes | "$sdkmanager_path" --licenses >/dev/null || true
+          "$sdkmanager_path" 'build-tools;35.0.0'
+          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          aapt="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$signer" verify --print-certs /tmp/abaj-monitor-release/ABAJ-Monitor-One-v0.6.6.apk > /tmp/abaj-monitor-release/old-signature.txt
+          "$signer" verify --print-certs /tmp/abaj-monitor-release/ABAJ-Monitor-One-v0.6.7.apk > /tmp/abaj-monitor-release/new-signature.txt
+          old="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/abaj-monitor-release/old-signature.txt | head -1)"
+          new="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/abaj-monitor-release/new-signature.txt | head -1)"
+          test -n "$old"
+          test "$old" = "$new"
+          "$aapt" dump badging /tmp/abaj-monitor-release/ABAJ-Monitor-One-v0.6.6.apk | head -1 | grep -q "name='am.abaj.monitor.client' versionCode='13'"
+          "$aapt" dump badging /tmp/abaj-monitor-release/ABAJ-Monitor-One-v0.6.7.apk | head -1 | grep -q "name='am.abaj.monitor.client' versionCode='14'"
+      - name: Publish only after all validations
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin abaj-monitor-downloads
+          git checkout -B abaj-monitor-downloads origin/abaj-monitor-downloads
+          python3 - <<'PY'
+          import json
+          info=json.load(open('peer-updates.json',encoding='utf8'))
+          assert info['versionCode']==13
+          assert info['sha256']=='ade561f03236622b2b54f3ad5631295515bcfcbc7b7d80237b053802f49550fa'
+          PY
+          cp /tmp/abaj-monitor-release/ABAJ-Monitor-One-v0.6.7.apk ABAJ-Monitor-One-v0.6.7.apk
+          cp /tmp/abaj-monitor-release/ABAJ-Monitor-One-v0.6.7.apk ABAJ-Monitor-One.apk
+          python3 - <<'PY'
+          import json
+          version={'versionCode':14,'apkUrl':'https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.6.7.apk','sha256':'b1b178f5e9848cc6e20532a007b8d83aeb72dfef3ae05b973e97796c7b5c989e'}
+          with open('peer-updates.json','w',encoding='utf8') as f:
+              json.dump(version,f,ensure_ascii=False)
+          PY
+          cat > README-One.md <<'EOF'
+          # ABAJ Monitor One 0.6.7
+
+          [Скачать ABAJ Monitor One 0.6.7](./ABAJ-Monitor-One-v0.6.7.apk)
+
+          Исправлены контрастность тёмной темы, нижние вкладки и локальная проверка камеры через CameraX. Работающие функции и разрешения сохранены.
+
+          Автообновление: [peer-updates.json](./peer-updates.json).
+
+          Обновление подписано тем же тестовым сертификатом, что и 0.6.6. Для версий с другим сертификатом Android потребует отдельной установки.
+          EOF
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add ABAJ-Monitor-One-v0.6.7.apk ABAJ-Monitor-One.apk peer-updates.json README-One.md
+          git commit -m "release: ABAJ Monitor One 0.6.7 camera and UI hotfix [skip ci]"
+          git push origin HEAD:abaj-monitor-downloads
