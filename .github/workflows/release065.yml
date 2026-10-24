@@ -1,0 +1,34 @@
+name: Publish ABAJ Monitor One 0.6.5 Camera Stability
+on:
+  push:
+    branches: [abaj-monitor-downloads]
+    paths: [.github/workflows/release065.yml]
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reassemble and cryptographically verify APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat transfer065/apk.part0{0,1,2,3,4,5,6,7,8,9} transfer065/apk.part1{0,1,2,3,4,5} | base64 -d > ABAJ-Monitor-One-v0.6.5.apk
+          echo '5efb679dadc70a467d33dd176c95160813a6cefa8fb6365b606d1e8097593df9  ABAJ-Monitor-One-v0.6.5.apk' | sha256sum -c -
+          test "$(stat -c '%s' ABAJ-Monitor-One-v0.6.5.apk)" = '4561723'
+          cp ABAJ-Monitor-One-v0.6.5.apk ABAJ-Monitor-One.apk
+          python3 - <<'PY'
+          import json
+          v={'versionCode':12,'apkUrl':'https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.6.5.apk','sha256':'5efb679dadc70a467d33dd176c95160813a6cefa8fb6365b606d1e8097593df9'}
+          for name in ('peer-updates.json','client-updates.json'):
+              with open(name,'w') as f:json.dump(v,f)
+          PY
+      - name: Commit verified public Android distribution
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f ABAJ-Monitor-One.apk ABAJ-Monitor-One-v0.6.5.apk peer-updates.json client-updates.json
+          git commit -m 'release: ABAJ Monitor One v0.6.5 safe in-app video and CameraX'
+          git push origin HEAD:abaj-monitor-downloads
