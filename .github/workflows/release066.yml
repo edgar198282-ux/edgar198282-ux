@@ -1,0 +1,41 @@
+name: Release ABAJ Monitor One 0.6.6
+on:
+  push:
+    branches: [abaj-monitor-downloads]
+    paths: [.github/workflows/release066.yml]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct and verify signed APK
+        run: |
+          set -euo pipefail
+          for i in $(seq -w 0 15); do cat "transfer066/apk.part$i"; done | base64 -d > ABAJ-Monitor-One-v0.6.6.apk
+          echo 'ade561f03236622b2b54f3ad5631295515bcfcbc7b7d80237b053802f49550fa  ABAJ-Monitor-One-v0.6.6.apk' | sha256sum -c -
+          test "$(stat -c '%s' ABAJ-Monitor-One-v0.6.6.apk)" = "4561719"
+          cp ABAJ-Monitor-One-v0.6.6.apk ABAJ-Monitor-One.apk
+          python3 - <<'PY'
+          import json
+          m={'versionCode':13,'apkUrl':'https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.6.6.apk','sha256':'ade561f03236622b2b54f3ad5631295515bcfcbc7b7d80237b053802f49550fa'}
+          for name in ('peer-updates.json','client-updates.json'):
+              with open(name,'w') as f: json.dump(m,f)
+          PY
+          cat > README-One.md <<'MD'
+          # ABAJ Monitor One 0.6.6
+          [Download the Android APK](./ABAJ-Monitor-One-v0.6.6.apk)
+          
+          **Changes:** compact user-requested interface with fixed People, Map, and Settings tabs; reduced duplicate controls and repetitive explanatory text; contact actions in one menu; dark/light themes; in-app, explicitly approved video calls; optional GPS sharing.
+          
+          Update manifest: peer-updates.json. For an old APK signed by a different certificate, Android cannot install updates over the old version. Make sure user data is backed up before replacing an older install. Later releases must reuse the same signing key.
+          
+          Consent required for GPS, camera, and microphone. External services are used for discovery and video calls.
+          MD
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -f ABAJ-Monitor-One.apk ABAJ-Monitor-One-v0.6.6.apk peer-updates.json client-updates.json README-One.md
+          git commit -m 'release: ABAJ Monitor One 0.6.6 compact UI'
+          git push origin HEAD:abaj-monitor-downloads
