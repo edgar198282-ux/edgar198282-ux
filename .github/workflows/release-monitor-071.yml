@@ -39,7 +39,7 @@ jobs:
           test -n "$old"
           test "$old" = "$new"
           test "$new" = "fb12aaa4185268d321205f19a434cb85cb98654c79e98b11a12e402a853b4663"
-          "$aapt" dump badging /tmp/abaj-release/ABAJ-Monitor-One-v0.7.0.apk | head -1 | grep -q "name='am.abaj.monitor.client' versionCode='18'"
+          "$aapt" dump badging /tmp/abaj-release/ABAJ-Monitor-One-v0.7.0.apk | head -1 | grep -q "name='am.abaj.monitor.client' versionCode='17'"
           "$aapt" dump badging /tmp/abaj-release/ABAJ-Monitor-One-v0.7.1.apk | head -1 | grep -q "name='am.abaj.monitor.client' versionCode='18'"
       - name: Publish signed version and auto-update
         shell: bash
@@ -65,7 +65,7 @@ jobs:
 
           [Скачать ABAJ MONITOR 0.7.1](./ABAJ-Monitor-One-v0.7.1.apk)
 
-          Тема и язык — компактные соседние кнопки в разделе «Настройки»: светлая/тёмная, русский/армянский. Выбор сохраняется. Добавлена армянская локализация основных экранов и элементов звонков.
+          Включение и отключение GPS перенесено из раздела «Карта» в «Настройки». Экран карты поддерживает светлую и тёмную темы. Переключатели языка и темы остаются в настройках.
 
           Геолокация запускается вручную после разрешения Android на местоположение «Всегда», затем продолжает работать в видимой foreground-службе до ручного отключения. Согласованная передача восстанавливается после перезапуска приложения; после перезагрузки телефона — если это позволяет Android.
 
