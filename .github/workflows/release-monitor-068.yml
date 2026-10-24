@@ -1,0 +1,78 @@
+name: Publish ABAJ Monitor 0.6.8 internet calls
+on:
+  push:
+    branches: [abaj-monitor-v068-release-staging]
+    paths: ['.github/workflows/release-monitor-068.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: abaj-monitor-one-release
+  cancel-in-progress: false
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct and verify signed update
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/abaj-release
+          test "$(find v068-transfer -maxdepth 1 -type f -name 'apk.part.*' | wc -l)" -eq 9
+          cat v068-transfer/apk.part.0{00..08} | base64 -d > /tmp/abaj-release/ABAJ-Monitor-One-v0.6.8.apk
+          echo "0aa94aa4935f281e6ce1ea47ba8c027a23131976167880574ceec2e5d039ebf0  /tmp/abaj-release/ABAJ-Monitor-One-v0.6.8.apk" | sha256sum -c -
+          curl -fL --retry 3 --connect-timeout 15 -o /tmp/abaj-release/ABAJ-Monitor-One-v0.6.7.apk \
+            https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.6.7.apk
+          echo "b1b178f5e9848cc6e20532a007b8d83aeb72dfef3ae05b973e97796c7b5c989e  /tmp/abaj-release/ABAJ-Monitor-One-v0.6.7.apk" | sha256sum -c -
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -1)"
+          test -n "$sdkmanager_path"
+          yes | "$sdkmanager_path" --licenses >/dev/null || true
+          "$sdkmanager_path" 'build-tools;35.0.0'
+          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          aapt="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$signer" verify --print-certs /tmp/abaj-release/ABAJ-Monitor-One-v0.6.7.apk > /tmp/abaj-release/old-cert.txt
+          "$signer" verify --print-certs /tmp/abaj-release/ABAJ-Monitor-One-v0.6.8.apk > /tmp/abaj-release/new-cert.txt
+          old="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/abaj-release/old-cert.txt | head -1)"
+          new="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/abaj-release/new-cert.txt | head -1)"
+          test -n "$old"
+          test "$old" = "$new"
+          "$aapt" dump badging /tmp/abaj-release/ABAJ-Monitor-One-v0.6.7.apk | head -1 | grep -q "name='am.abaj.monitor.client' versionCode='14'"
+          "$aapt" dump badging /tmp/abaj-release/ABAJ-Monitor-One-v0.6.8.apk | head -1 | grep -q "name='am.abaj.monitor.client' versionCode='15'"
+      - name: Publish version 15 to existing update channel
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin abaj-monitor-downloads
+          git checkout -B abaj-monitor-downloads origin/abaj-monitor-downloads
+          python3 - <<'PY'
+          import json
+          info=json.load(open('peer-updates.json',encoding='utf8'))
+          assert info['versionCode']==14
+          assert info['sha256']=='b1b178f5e9848cc6e20532a007b8d83aeb72dfef3ae05b973e97796c7b5c989e'
+          PY
+          cp /tmp/abaj-release/ABAJ-Monitor-One-v0.6.8.apk ABAJ-Monitor-One-v0.6.8.apk
+          cp /tmp/abaj-release/ABAJ-Monitor-One-v0.6.8.apk ABAJ-Monitor-One.apk
+          python3 - <<'PY'
+          import json
+          version={'versionCode':15,'apkUrl':'https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.6.8.apk','sha256':'0aa94aa4935f281e6ce1ea47ba8c027a23131976167880574ceec2e5d039ebf0'}
+          with open('peer-updates.json','w',encoding='utf8') as f:
+              json.dump(version,f,ensure_ascii=False)
+          PY
+          cat > README-One.md <<'EOF'
+          # ABAJ Monitor One 0.6.8
+
+          [Скачать ABAJ Monitor 0.6.8](./ABAJ-Monitor-One-v0.6.8.apk)
+
+          Добавлены выбор аудио- и видеозвонка в карточке контакта, шифрованные приглашения, подтверждение входящих вызовов и отдельный аудиорежим с отключённой камерой.
+
+          Интернет-звонки используют внешний сервис Jitsi Meet; приглашения отправляются через ntfy.sh. Собственный сервер и общая Wi-Fi сеть не нужны. Для приёма входящего вызова в этой версии приложение должно быть открыто; для надёжных звонков при закрытом приложении понадобится системная push-доставка.
+
+          APK подписан тем же тестовым сертификатом, что и версия 0.6.7, и поддерживает обновление без удаления установленных данных.
+          EOF
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add ABAJ-Monitor-One-v0.6.8.apk ABAJ-Monitor-One.apk peer-updates.json README-One.md
+          git commit -m "release: ABAJ Monitor One 0.6.8 internet audio and video calls [skip ci]"
+          git push origin HEAD:abaj-monitor-downloads
