@@ -25,7 +25,7 @@ jobs:
           mkdir -p /tmp/abaj-release
           test "$(find v071-transfer -maxdepth 1 -type f -name 'apk.part.*' | wc -l)" -eq 9
           cat v071-transfer/apk.part.0{00..08} | base64 -d > /tmp/abaj-release/ABAJ-Monitor-One-v0.7.1.apk
-          echo "80bca3518a81786da367cbf6753b1db30d3ea58e522047f1c6ce5a1029ad323  /tmp/abaj-release/ABAJ-Monitor-One-v0.7.1.apk" | sha256sum -c -
+          echo "80bca3518a81786da367cbf6753b1db30d3ea58e522047f1c6ce5a1029ad323d  /tmp/abaj-release/ABAJ-Monitor-One-v0.7.1.apk" | sha256sum -c -
           curl -fL --retry 3 --connect-timeout 15 -o /tmp/abaj-release/ABAJ-Monitor-One-v0.7.0.apk \
             https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.7.0.apk
           echo "cb17f5a190b1e2b4b769c54cf40421c5fce3ef1c8a567c826c63d5812e561fb6  /tmp/abaj-release/ABAJ-Monitor-One-v0.7.0.apk" | sha256sum -c -
@@ -60,7 +60,7 @@ jobs:
           cp /tmp/abaj-release/ABAJ-Monitor-One-v0.7.1.apk ABAJ-Monitor-One.apk
           python3 - <<'PY'
           import json
-          obj={'versionCode':18,'apkUrl':'https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.7.1.apk','sha256':'80bca3518a81786da367cbf6753b1db30d3ea58e522047f1c6ce5a1029ad323'}
+          obj={'versionCode':18,'apkUrl':'https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.7.1.apk','sha256':'80bca3518a81786da367cbf6753b1db30d3ea58e522047f1c6ce5a1029ad323d'}
           with open('peer-updates.json','w',encoding='utf8') as f: json.dump(obj,f,ensure_ascii=False)
           PY
           cat > README-One.md <<'EOF'
