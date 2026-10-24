@@ -17,13 +17,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: abaj-monitor-v071-release-staging
+          ref: c9bcc68a5ecf99008010e94327dfefd585be3900
       - name: Verify APK integrity, signer and Android version
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p /tmp/abaj-release
-          test "$(find v076-transfer -maxdepth 1 -type f -name 'apk.part.*' | wc -l)" -eq 9
+          test "$(find v076-transfer -maxdepth 1 -type f -name 'apk.part.[0-9][0-9][0-9]' | wc -l)" -eq 9
           cat v076-transfer/apk.part.0{00..08} | base64 -d > /tmp/abaj-release/ABAJ-Monitor-One-v0.7.6.apk
           echo "0fc957ce97bc3db4c2427103a7fd1ade6a4b12b70f796dca81fd943d1e79fb64  /tmp/abaj-release/ABAJ-Monitor-One-v0.7.6.apk" | sha256sum -c -
           curl -fL --retry 3 --connect-timeout 15 -o /tmp/abaj-release/ABAJ-Monitor-One-v0.7.5.apk \
@@ -42,9 +42,13 @@ jobs:
           test -n "$old"
           test "$old" = "$new"
           test "$new" = "fb12aaa4185268d321205f19a434cb85cb98654c79e98b11a12e402a853b4663"
-          "$aapt" dump badging /tmp/abaj-release/ABAJ-Monitor-One-v0.7.5.apk | head -1 | grep -q "name='am.abaj.monitor.client' versionCode='22'"
-          "$aapt" dump badging /tmp/abaj-release/ABAJ-Monitor-One-v0.7.6.apk | head -1 | grep -q "name='am.abaj.monitor.client' versionCode='23'"
-      - name: Publish signed version and auto-update
+          "$aapt" dump badging /tmp/abaj-release/ABAJ-Monitor-One-v0.7.5.apk > /tmp/abaj-release/old-package.txt
+          "$aapt" dump badging /tmp/abaj-release/ABAJ-Monitor-One-v0.7.6.apk > /tmp/abaj-release/new-package.txt
+          grep -Fq "name='am.abaj.monitor.client' versionCode='22' versionName='0.7.5'" /tmp/abaj-release/old-package.txt
+          grep -Fq "name='am.abaj.monitor.client' versionCode='23' versionName='0.7.6'" /tmp/abaj-release/new-package.txt
+          cat /tmp/abaj-release/new-cert.txt
+          sed -n '1p' /tmp/abaj-release/new-package.txt
+      - name: Publish APK and verify public download before updating manifest
         shell: bash
         run: |
           set -euo pipefail
@@ -52,33 +56,46 @@ jobs:
           git checkout -B abaj-monitor-downloads origin/abaj-monitor-downloads
           python3 - <<'PY'
           import json
-          info=json.load(open('peer-updates.json',encoding='utf8'))
-          assert info['versionCode']==22, "Release channel has an unexpected version"
-          assert info['sha256']=='59d5347a01b8dc074feec12850676c87160d23a4b45c7c087a27e964b1290413'
+          info = json.load(open('peer-updates.json'))
+          expected = {22: '59d5347a01b8dc074feec12850676c87160d23a4b45c7c087a27e964b1290413', 23: '0fc957ce97bc3db4c2427103a7fd1ade6a4b12b70f796dca81fd943d1e79fb64'}
+          assert info['versionCode'] in expected, 'Unexpected release channel version'
+          assert info['sha256'] == expected[info['versionCode']]
           PY
           cp /tmp/abaj-release/ABAJ-Monitor-One-v0.7.6.apk ABAJ-Monitor-One-v0.7.6.apk
           cp /tmp/abaj-release/ABAJ-Monitor-One-v0.7.6.apk ABAJ-Monitor-One.apk
-          python3 - <<'PY'
-          import json
-          obj={'versionCode':23,'apkUrl':'https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.7.6.apk','sha256':'0fc957ce97bc3db4c2427103a7fd1ade6a4b12b70f796dca81fd943d1e79fb64'}
-          with open('peer-updates.json','w',encoding='utf8') as f: json.dump(obj,f,ensure_ascii=False)
-          PY
-          cat > README-One.md <<'EOF'
-          # ABAJ Monitor One v0.7.6
-
-          [Скачать ABAJ MONITOR 0.7.6](./ABAJ-Monitor-One-v0.7.6.apk)
-
-          Включение и отключение GPS перенесено из раздела «Карта» в «Настройки». Экран карты поддерживает светлую и тёмную темы. Переключатели языка и темы остаются в настройках.
-
-          Геолокация запускается вручную после разрешения Android на местоположение «Всегда», затем продолжает работать в видимой foreground-службе до ручного отключения. Согласованная передача восстанавливается после перезапуска приложения; после перезагрузки телефона — если это позволяет Android.
-
-          📞 Аудиозвонок и 📹 видеозвонок доступны в карточке добавленных контактов, работают через внешний сервис Jitsi Meet, приглашения передаются через ntfy.sh. Для входящего звонка нужно открытое приложение или касание уведомления. Надёжная доставка звонков при закрытом приложении не гарантируется.
-
-          Автообновление подключено. APK 0.7.6 подписан сертификатом версии 0.7.5.
-          EOF
           git config user.name github-actions
           git config user.email github-actions@users.noreply.github.com
-          git add ABAJ-Monitor-One-v0.7.6.apk ABAJ-Monitor-One.apk peer-updates.json README-One.md
-          git commit -m "release: ABAJ Monitor One v0.7.6 RU AM settings badges and persistent GPS [skip ci]"
-          git push origin HEAD:abaj-monitor-downloads
-# Trigger verified v0.7.6 release publication
+          git add ABAJ-Monitor-One-v0.7.6.apk ABAJ-Monitor-One.apk
+          if ! git diff --cached --quiet; then
+            git commit -m "release: publish verified ABAJ Monitor 0.7.6 APK [skip ci]"
+            git push origin HEAD:abaj-monitor-downloads
+          fi
+          base=https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads
+          expected=0fc957ce97bc3db4c2427103a7fd1ade6a4b12b70f796dca81fd943d1e79fb64
+          for file in ABAJ-Monitor-One-v0.7.6.apk ABAJ-Monitor-One.apk; do
+            verified=false
+            for attempt in {1..12}; do
+              if curl -fL --connect-timeout 15 --max-time 90 "$base/$file?release=$(git rev-parse HEAD)&attempt=$attempt" -o "/tmp/abaj-release/public-$file" &&
+                echo "$expected  /tmp/abaj-release/public-$file" | sha256sum -c -; then
+                verified=true
+                break
+              fi
+              sleep 10
+            done
+            test "$verified" = true
+            cmp /tmp/abaj-release/ABAJ-Monitor-One-v0.7.6.apk "/tmp/abaj-release/public-$file"
+          done
+          python3 - <<'PY'
+          import json
+          obj = {'versionCode': 23, 'apkUrl': 'https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.7.6.apk', 'sha256': '0fc957ce97bc3db4c2427103a7fd1ade6a4b12b70f796dca81fd943d1e79fb64'}
+          with open('peer-updates.json', 'w') as f:
+              json.dump(obj, f)
+              f.write('\n')
+          PY
+          git add peer-updates.json
+          if ! git diff --cached --quiet; then
+            git commit -m "release: activate verified ABAJ Monitor 0.7.6 auto-update [skip ci]"
+            git push origin HEAD:abaj-monitor-downloads
+          fi
+          curl -fL --retry 5 --retry-all-errors --connect-timeout 15 --max-time 90 "$base/peer-updates.json?release=$(git rev-parse HEAD)" -o /tmp/abaj-release/public-manifest.json
+          cmp peer-updates.json /tmp/abaj-release/public-manifest.json
