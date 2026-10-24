@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths: ['.github/workflows/release-monitor-071.yml']
   workflow_dispatch:
+# Release verification and staged artifact publication only
 permissions:
   contents: write
 concurrency:
