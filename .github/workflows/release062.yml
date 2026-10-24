@@ -1,0 +1,30 @@
+name: ABAJ Android 062 release
+on:
+  push:
+    branches: [abaj-monitor-downloads]
+    paths: [.github/workflows/release062.yml]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          base64 -w0 ABAJ-Monitor-One.apk > old.b64
+          head -c 1200000 old.b64 > new.b64
+          cat transfer062/apk.part0{2,3,4,5} >> new.b64
+          base64 -d new.b64 > ABAJ-Monitor-One-v0.6.2.apk
+          echo '279f211f3f36c8b986c3681f291240aa7e7847fed13a4aa58bcdf94ad80b6b60  ABAJ-Monitor-One-v0.6.2.apk' | sha256sum -c -
+          cp ABAJ-Monitor-One-v0.6.2.apk ABAJ-Monitor-One.apk
+          python3 - <<'PY'
+          import json
+          o={'versionCode':9,'apkUrl':'https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.6.2.apk','sha256':'279f211f3f36c8b986c3681f291240aa7e7847fed13a4aa58bcdf94ad80b6b60'}
+          for n in ('peer-updates.json','client-updates.json'):
+              open(n,'w').write(json.dumps(o))
+          PY
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add ABAJ-Monitor-One.apk ABAJ-Monitor-One-v0.6.2.apk peer-updates.json client-updates.json
+          git commit -m 'release 0.6.2'
+          git push origin HEAD:abaj-monitor-downloads
