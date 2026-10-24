@@ -78,3 +78,4 @@ jobs:
           git add ABAJ-Monitor-One-v0.7.1.apk ABAJ-Monitor-One.apk peer-updates.json README-One.md
           git commit -m "release: ABAJ Monitor One v0.7.1 RU AM settings badges and persistent GPS [skip ci]"
           git push origin HEAD:abaj-monitor-downloads
+# Trigger verified v0.7.1 release publication
