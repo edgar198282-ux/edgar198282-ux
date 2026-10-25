@@ -1,0 +1,101 @@
+name: Publish ABAJ Monitor 0.7.8
+on:
+  push:
+    branches: [main]
+    paths: ['release-ready/monitor-078.txt']
+  workflow_dispatch:
+# Release verification and staged artifact publication only
+permissions:
+  contents: write
+concurrency:
+  group: abaj-monitor-one-release
+  cancel-in-progress: false
+jobs:
+  verify-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 299051a3b4bd7752ba43a08aaa3fbbf24787a507
+      - name: Verify APK integrity, signer and Android version
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/abaj-release
+          test "$(find v078-transfer -maxdepth 1 -type f -name 'apk.part.[0-9][0-9][0-9]' | wc -l)" -eq 9
+          cat v078-transfer/apk.part.* | base64 -d > /tmp/abaj-release/ABAJ-Monitor-One-v0.7.8.apk
+          echo "c47df2a6c308658ead7cacefa861a6172c08dad11840838bb72fcb7dbc4ff754  /tmp/abaj-release/ABAJ-Monitor-One-v0.7.8.apk" | sha256sum -c -
+          curl -fL --retry 3 --connect-timeout 15 -o /tmp/abaj-release/ABAJ-Monitor-One-v0.7.6.apk \
+            https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.7.6.apk
+          echo "0fc957ce97bc3db4c2427103a7fd1ade6a4b12b70f796dca81fd943d1e79fb64  /tmp/abaj-release/ABAJ-Monitor-One-v0.7.6.apk" | sha256sum -c -
+          sdkmanager_path="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -1)"
+          test -n "$sdkmanager_path"
+          yes | "$sdkmanager_path" --licenses >/dev/null || true
+          "$sdkmanager_path" 'build-tools;35.0.0'
+          signer="$ANDROID_HOME/build-tools/35.0.0/apksigner"
+          aapt="$ANDROID_HOME/build-tools/35.0.0/aapt"
+          "$signer" verify --print-certs /tmp/abaj-release/ABAJ-Monitor-One-v0.7.6.apk > /tmp/abaj-release/old-cert.txt
+          "$signer" verify --print-certs /tmp/abaj-release/ABAJ-Monitor-One-v0.7.8.apk > /tmp/abaj-release/new-cert.txt
+          old="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/abaj-release/old-cert.txt | head -1)"
+          new="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/abaj-release/new-cert.txt | head -1)"
+          test -n "$old"
+          test "$old" = "$new"
+          test "$new" = "fb12aaa4185268d321205f19a434cb85cb98654c79e98b11a12e402a853b4663"
+          "$aapt" dump badging /tmp/abaj-release/ABAJ-Monitor-One-v0.7.6.apk > /tmp/abaj-release/old-package.txt
+          "$aapt" dump badging /tmp/abaj-release/ABAJ-Monitor-One-v0.7.8.apk > /tmp/abaj-release/new-package.txt
+          grep -Fq "name='am.abaj.monitor.client' versionCode='23' versionName='0.7.6'" /tmp/abaj-release/old-package.txt
+          grep -Fq "name='am.abaj.monitor.client' versionCode='25' versionName='0.7.8'" /tmp/abaj-release/new-package.txt
+          cat /tmp/abaj-release/new-cert.txt
+          sed -n '1p' /tmp/abaj-release/new-package.txt
+      - name: Publish APK and verify public download before updating manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin abaj-monitor-downloads
+          git checkout -B abaj-monitor-downloads origin/abaj-monitor-downloads
+          python3 - <<'PY'
+          import json
+          info = json.load(open('peer-updates.json'))
+          expected = {23: '0fc957ce97bc3db4c2427103a7fd1ade6a4b12b70f796dca81fd943d1e79fb64', 25: 'c47df2a6c308658ead7cacefa861a6172c08dad11840838bb72fcb7dbc4ff754'}
+          assert info['versionCode'] in expected, 'Unexpected release channel version'
+          assert info['sha256'] == expected[info['versionCode']]
+          PY
+          cp /tmp/abaj-release/ABAJ-Monitor-One-v0.7.8.apk ABAJ-Monitor-One-v0.7.8.apk
+          cp /tmp/abaj-release/ABAJ-Monitor-One-v0.7.8.apk ABAJ-Monitor-One.apk
+          git config user.name github-actions
+          git config user.email github-actions@users.noreply.github.com
+          git add ABAJ-Monitor-One-v0.7.8.apk ABAJ-Monitor-One.apk
+          if ! git diff --cached --quiet; then
+            git commit -m "release: publish verified ABAJ Monitor 0.7.8 APK [skip ci]"
+            git push origin HEAD:abaj-monitor-downloads
+          fi
+          base=https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads
+          expected=c47df2a6c308658ead7cacefa861a6172c08dad11840838bb72fcb7dbc4ff754
+          for file in ABAJ-Monitor-One-v0.7.8.apk ABAJ-Monitor-One.apk; do
+            verified=false
+            for attempt in {1..12}; do
+              if curl -fL --connect-timeout 15 --max-time 90 "$base/$file?release=$(git rev-parse HEAD)&attempt=$attempt" -o "/tmp/abaj-release/public-$file" &&
+                echo "$expected  /tmp/abaj-release/public-$file" | sha256sum -c -; then
+                verified=true
+                break
+              fi
+              sleep 10
+            done
+            test "$verified" = true
+            cmp /tmp/abaj-release/ABAJ-Monitor-One-v0.7.8.apk "/tmp/abaj-release/public-$file"
+          done
+          python3 - <<'PY'
+          import json
+          obj = {'versionCode': 25, 'apkUrl': 'https://raw.githubusercontent.com/edgar198282-ux/edgar198282-ux/abaj-monitor-downloads/ABAJ-Monitor-One-v0.7.8.apk', 'sha256': 'c47df2a6c308658ead7cacefa861a6172c08dad11840838bb72fcb7dbc4ff754'}
+          with open('peer-updates.json', 'w') as f:
+              json.dump(obj, f)
+              f.write('\n')
+          PY
+          git add peer-updates.json
+          if ! git diff --cached --quiet; then
+            git commit -m "release: activate verified ABAJ Monitor 0.7.8 auto-update [skip ci]"
+            git push origin HEAD:abaj-monitor-downloads
+          fi
+          curl -fL --retry 5 --retry-all-errors --connect-timeout 15 --max-time 90 "$base/peer-updates.json?release=$(git rev-parse HEAD)" -o /tmp/abaj-release/public-manifest.json
+          cmp peer-updates.json /tmp/abaj-release/public-manifest.json
