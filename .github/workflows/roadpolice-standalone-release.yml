@@ -11,6 +11,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: roadpolice-standalone-public-release
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -27,7 +31,8 @@ jobs:
           from pathlib import Path
 
           folder = Path("roadpolice-standalone")
-          data = json.loads((folder / "latest.json").read_text(encoding="utf-8"))
+          candidate = folder / "candidate.json"
+          data = json.loads((candidate if candidate.exists() else folder / "latest.json").read_text(encoding="utf-8"))
           version = data["versionName"]
           assert re.fullmatch(r"1\.0\.[0-9]+", version), "Invalid version name"
           assert data["versionCode"] > 0, "Invalid versionCode"
@@ -52,11 +57,14 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
         run: |
-          VERSION="$(python3 -c 'import json; print(json.load(open("roadpolice-standalone/latest.json"))["versionName"])')"
+          VERSION="$(python3 -c 'import json,pathlib; p=pathlib.Path("roadpolice-standalone/candidate.json"); print(json.loads((p if p.exists() else p.with_name("latest.json")).read_text())["versionName"])')"
           TAG="roadpolice-standalone-v$VERSION"
           APK="roadpolice-standalone/roadpolice-standalone-$VERSION.apk"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" roadpolice-standalone/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --clobber
+            mkdir -p existing-release
+            gh release download "$TAG" --pattern "roadpolice-standalone-$VERSION.apk" --dir existing-release --repo "$GITHUB_REPOSITORY"
+            cmp "$APK" "existing-release/roadpolice-standalone-$VERSION.apk"
           else
-            gh release create "$TAG" "$APK" roadpolice-standalone/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --title "RoadPolice Standalone $VERSION" --notes "Автономная Android-версия RoadPolice. APK подписан тем же сертификатом. Для перехода на обновления требуется установка версии 1.0.1 один раз."
+            gh release create "$TAG" "$APK" roadpolice-standalone/SHA256SUMS.txt --repo "$GITHUB_REPOSITORY" --title "RoadPolice Standalone $VERSION" --notes "Автономная Android-версия RoadPolice. APK подписан тем же сертификатом. Устанавливается поверх предыдущей версии без удаления данных."
           fi
+
